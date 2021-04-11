@@ -16,7 +16,7 @@ func TestList(t *testing.T){
     file.Write([]byte("tconst\ttitleType\tprimaryTitle\toriginalTitle\tisAdult\tstartYear\tendYear\truntimeMinutes\tgenres\n"+
         "tt0000001\tshort\tCarmencita\tCarmencita\t0\t1894\t\\N\t1\tDocumentary,Short\n"+
         "tt0000002\tshort\tLe clown et ses chiens\tLe clown et ses chiens\t0\t1892\t\\N\t\\N\tAnimation,Short\n"+
-        "tt0033122\tmovie\t\"Swing it\" magistern\t\"Swing it\" magistern\t0\t1940\t\\N^I92\tComedy,Music\n"))
+        "tt0033122\tmovie\t\"Swing it\" magistern\t\"Swing it\" magistern\t0\t1940\t\\N\t92\tComedy,Music\n"))
     file.Close()
 
     imdbClient, err := imdb.New(file.Name())

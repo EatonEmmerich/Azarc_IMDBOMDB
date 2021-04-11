@@ -1,10 +1,9 @@
 package imdb
 
 import (
-    "encoding/csv"
+    "bufio"
     "errors"
     "fmt"
-    "io"
     "os"
     "strconv"
     "strings"
@@ -39,28 +38,27 @@ func New(path string) (Client, error){
 
 func (c Client) List() ([]Item, error) {
     var list []Item
-    reader := csv.NewReader(c.file)
-    reader.Comma = '\t'
-    reader.FieldsPerRecord = 9
-
-    res := make([]string,9)
-    res, err :=  reader.Read()
-    if err != nil {
-        return nil, err
+    scanner := bufio.NewScanner(c.file)
+    ok := scanner.Scan()
+    if !ok {
+        return nil, errors.New("could not scan")
     }
-    if len(res) != 9 {
-        errorString := fmt.Sprintf("invalid headers for file, expecting 9, got %d", len(res))
+
+
+    header := strings.Split(scanner.Text(), "\t")
+    if len(header) != 9 {
+        errorString := fmt.Sprintf("invalid headers for file, expecting 9, got %d", len(header))
         return nil, errors.New(errorString)
     }
 
+    res := make([]string,9)
+
     for {
-        res, err := reader.Read()
-        if err != nil {
-            if err == io.EOF{
-                break
-            }
-            return nil, err
+        ok := scanner.Scan()
+        if !ok {
+            break
         }
+        res = strings.Split(scanner.Text(), "\t")
 
         isAdult, err := parseInt(res[4])
         if err != nil {
