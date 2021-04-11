@@ -9,13 +9,13 @@ import (
 )
 
 var apiKey = flag.String("api_key","","The omdb API key")
-var filePath = flag.String("file_path", "name.basics.tsv.gz", "Path to the file containing the imdb names")
+var filePath = flag.String("file_path", "title.basics.tsv", "Path to the file containing the imdb names")
 
 
 func main() {
 	flag.Parse()
 
-	imdbClient := imdb.New(*filePath)
+	imdbClient, err := imdb.New(*filePath)
 	list, err := imdbClient.List()
 	if err != nil {
 		panic(err)
