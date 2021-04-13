@@ -6,7 +6,6 @@ import (
     "fmt"
     "os"
     "os/signal"
-    "runtime"
     "time"
 
     "Azarc/imdb"
@@ -43,9 +42,10 @@ func main() {
                 case <-c:
                     cancel()
                 case <-ctx.Done():
-                    gracefullyCancel(ctx.Err())
+                    maybeExitGracefully(ctx.Err())
+                    os.Exit(0)
                 default:
-                    fmt.Printf("number of goroutines %d\n", runtime.NumGoroutine())
+                    //fmt.Printf("number of goroutines %d\n", runtime.NumGoroutine())
                     time.Sleep(time.Second)
             }
         }
@@ -56,19 +56,21 @@ func main() {
     imdbClient, err := imdb.New(*filePath, *fileReadRoutines)
     list, err := imdbClient.List(ctx, filters...)
     if err != nil {
-        gracefullyCancel(err)
+        maybeExitGracefully(err)
     }
-    fmt.Printf("item: %#v", list)
 
     omdbClient := omdb.New(*apiKey)
-    item, err := omdbClient.Info(ctx, "tt0000005")
-    if err != nil {
-        gracefullyCancel(err)
+
+    for _, imdbitem := range list {
+        omdbItem, err := omdbClient.Info(ctx, imdbitem.TConst)
+        if err != nil {
+            maybeExitGracefully(err)
+        }
+        fmt.Printf("imdbItem: %#v\nomdbItem: %#v\n\n", imdbitem, omdbItem)
     }
-    fmt.Printf("item: %#v", item)
 }
 
-func gracefullyCancel(err error){
+func maybeExitGracefully(err error){
     if err == context.DeadlineExceeded || err == context.Canceled {
         fmt.Printf("Stopping execution\n")
         os.Exit(0)

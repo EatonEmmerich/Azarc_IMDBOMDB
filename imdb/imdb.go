@@ -67,7 +67,15 @@ func (c *Client) List(ctx context.Context, filters ...Filter) ([]Item, error) {
 
     listTotal := make([][]Item, c.goroutines)
     for i := 0; i < c.goroutines; i++ {
-        go c.list(ctx, i, &listTotal[i], filters, wg, errorChan)
+        iCopy := i
+        go func() {
+            err := c.list(ctx, iCopy, &listTotal[iCopy], filters)
+            if err != nil {
+                errorChan <- err
+                return
+            }
+            wg.Done()
+        }()
     }
 
     go func() {
@@ -91,105 +99,100 @@ func (c *Client) List(ctx context.Context, filters ...Filter) ([]Item, error) {
     return list, nil
 }
 
-func (c *Client) list(ctx context.Context, offset int, out *[]Item, filters []Filter, group *sync.WaitGroup, errorChan chan error) {
-    // todo: rather add group and errorChan in the go func in calling function.
+func (c *Client) list(ctx context.Context, offset int, out *[]Item, filters []Filter) error {
     file, err := os.Open(c.path)
     if err != nil {
-        errorChan <- err
-        return
+        return err
     }
     defer file.Close()
 
     scanner := bufio.NewScanner(file)
     for i := 0; i < offset+1; i++ {
-        ok := scanner.Scan()
-        if !ok {
-            err := scanner.Err()
-            if err != nil {
-                errorChan <- err
-                return
-            }
-            break
+        if !scanner.Scan(){
+            return scanner.Err()
         }
     }
 
-    res := make([]string, 9)
-    var item Item
-nextItem:
     for {
         select {
         case <-ctx.Done():
-            return
+            return nil
         default:
         }
-        ok := scanner.Scan()
-        if !ok {
-            err := scanner.Err()
-            if err != nil {
-                errorChan <- err
-                return
-            }
-            break
-        }
-        res = strings.Split(scanner.Text(), "\t")
 
-        isAdult, err := parseInt(res[4])
+        done, err := scan(scanner, out, filters)
         if err != nil {
-            errorChan <- err
-            return
+            return err
+        }
+        if done {
+            return nil
         }
 
-        startYear, err := parseInt(res[5])
-        if err != nil {
-            errorChan <- err
-            return
-        }
-
-        endYear, err := parseInt(res[6])
-        if err != nil {
-            errorChan <- err
-            return
-        }
-
-        runtimeMinutes, err := parseInt(res[7])
-        if err != nil {
-            errorChan <- err
-            return
-        }
-
-        genres := strings.Split(res[8], ",")
-        item = Item{
-            TConst:         res[0],
-            TitleType:      res[1],
-            PrimaryTitle:   res[2],
-            OriginalTitle:  res[3],
-            IsAdult:        isAdult,
-            StartYear:      startYear,
-            EndYear:        endYear,
-            RuntimeMinutes: runtimeMinutes,
-            Genres:         genres,
-        }
-        for _, filter := range filters {
-            if !filter.filter(item) {
-                continue nextItem
-            }
-        }
-        *out = append(*out, item)
-
-        for i := 0; i < c.goroutines; i++ {
-            ok := scanner.Scan()
-            if !ok {
-                err := scanner.Err()
-                if err != nil {
-                    errorChan <- err
-                    return
-                }
-                break
+        for i := 0; i < c.goroutines-1; i++ {
+            if !scanner.Scan() {
+                return scanner.Err()
             }
         }
     }
-    group.Done()
-    return
+
+    return nil
+}
+
+type scanner interface {
+    Scan() bool
+    Err() error
+    Text() string
+}
+
+func scan(scanner scanner, out *[]Item, filters []Filter) (bool, error) {
+    if !scanner.Scan() {
+        if scanner.Err() != nil {
+            return false, scanner.Err()
+        }
+        return true, nil
+    }
+    res := strings.Split(scanner.Text(), "\t")
+
+    isAdult, err := parseInt(res[4])
+    if err != nil {
+        return false, err
+    }
+
+    startYear, err := parseInt(res[5])
+    if err != nil {
+        return false, err
+    }
+
+    endYear, err := parseInt(res[6])
+    if err != nil {
+        return false, err
+    }
+
+    runtimeMinutes, err := parseInt(res[7])
+    if err != nil {
+        return false, err
+    }
+
+    genres := strings.Split(res[8], ",")
+    item := Item{
+        TConst:         res[0],
+        TitleType:      res[1],
+        PrimaryTitle:   res[2],
+        OriginalTitle:  res[3],
+        IsAdult:        isAdult,
+        StartYear:      startYear,
+        EndYear:        endYear,
+        RuntimeMinutes: runtimeMinutes,
+        Genres:         genres,
+    }
+
+    for _, filter := range filters {
+        if !filter.filter(item) {
+            return  false, nil
+        }
+    }
+    *out = append(*out, item)
+    return false, nil
 }
 
 func parseInt(input string) (int, error) {
